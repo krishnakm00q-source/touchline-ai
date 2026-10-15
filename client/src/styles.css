@@ -1,0 +1,414 @@
+
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap");
+
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #f4f5ef;
+  background: #0b0e0c;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button, a {
+  font: inherit;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #d5ff62;
+  outline-offset: 4px;
+}
+
+.app-shell {
+  max-width: 1500px;
+  margin: auto;
+  padding: 0 5%;
+}
+
+.topbar {
+  min-height: 82px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  border-bottom: 1px solid #252a25;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.brand b {
+  color: #d5ff62;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  color: #10140c;
+  background: #d5ff62;
+  border-radius: 10px;
+  font-size: 23px;
+}
+
+.live-label,
+.eyebrow,
+.match-meta,
+.select-hint,
+.briefing-detail span,
+footer {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  font-weight: 700;
+}
+
+.live-label {
+  color: #a6ada3;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  border-radius: 50%;
+  background: #d5ff62;
+}
+
+.hero {
+  padding: 65px 0 48px;
+}
+
+.eyebrow {
+  color: #d5ff62;
+}
+
+.hero h1,
+.section-heading h2,
+.analysis-panel h2 {
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: -1.5px;
+}
+
+.hero h1 {
+  margin: 18px 0;
+  font-size: clamp(42px, 6vw, 76px);
+  line-height: 1.04;
+}
+
+.hero-copy {
+  max-width: 510px;
+  color: #a7afa4;
+  line-height: 1.7;
+}
+
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.8fr);
+  gap: 25px;
+  align-items: start;
+}
+
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.section-heading h2,
+.analysis-panel h2 {
+  margin: 7px 0;
+  font-size: 27px;
+}
+
+.count {
+  color: #a7afa4;
+  font-size: 12px;
+}
+
+.match-list {
+  display: grid;
+  gap: 12px;
+}
+
+.match-card {
+  width: 100%;
+  text-align: left;
+  padding: 20px;
+  color: inherit;
+  background: #121713;
+  border: 1px solid #2a312b;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 150ms, background 150ms, transform 150ms;
+}
+
+.match-card:hover,
+.match-card:focus-visible {
+  border-color: #9dbf50;
+  transform: translateY(-2px);
+}
+
+.match-card.selected {
+  border-color: #d5ff62;
+  background: #192019;
+}
+
+.match-meta {
+  color: #a7afa4;
+  font-size: 10px;
+}
+
+.teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  font-weight: 600;
+}
+
+.teams span:last-child {
+  text-align: right;
+}
+
+.teams strong {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 18px;
+}
+
+.select-hint {
+  color: #d5ff62;
+  font-size: 9px;
+}
+
+.analysis-panel {
+  padding: 25px;
+  background: #121713;
+  border: 1px solid #2a312b;
+  border-radius: 16px;
+}
+
+.featured-score {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: start;
+  gap: 10px;
+  margin: 28px 0;
+  text-align: center;
+}
+
+.featured-score > div p {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.featured-score > strong {
+  padding-top: 12px;
+  font-size: 22px;
+}
+
+.team-initial {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin: auto;
+  border-radius: 14px;
+  background: #222a21;
+  color: #d5ff62;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 22px;
+}
+
+.briefing-detail {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid #2a312b;
+}
+
+.briefing-detail span {
+  color: #a7afa4;
+}
+
+.briefing-detail strong {
+  text-align: right;
+  font-size: 12px;
+}
+
+.analyst-note {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #1b2318;
+}
+
+.analyst-note .status-dot {
+  flex-shrink: 0;
+  margin-top: 6px;
+}
+
+.analyst-note p,
+.data-note {
+  color: #b2b9ae;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.data-note {
+  margin-top: 22px;
+  color: #899187;
+}
+
+.message {
+  color: #b2b9ae;
+  padding: 18px 0;
+}
+
+.error-panel {
+  margin: 25px 0;
+  padding: 24px;
+  border: 1px solid #734545;
+  border-radius: 12px;
+}
+
+.error-panel button {
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 8px;
+  background: #d5ff62;
+  color: #10140c;
+  cursor: pointer;
+}
+
+footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 35px 0;
+  margin-top: 45px;
+  border-top: 1px solid #252a25;
+  color: #7f887e;
+  font-size: 9px;
+}
+
+@media (max-width: 800px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    padding-top: 45px;
+  }
+
+  .topbar {
+    min-height: 70px;
+  }
+
+  .live-label {
+    font-size: 8px;
+    letter-spacing: 0.7px;
+  }
+}
+
+@media (max-width: 450px) {
+  .app-shell {
+    padding: 0 18px;
+  }
+
+  .teams {
+    gap: 7px;
+    font-size: 12px;
+  }
+
+  .match-card {
+    padding: 15px;
+  }
+
+  footer {
+    flex-direction: column;
+  }
+}
+/* Analyst form layout fix */
+.analyst-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  margin-top: 20px;
+}
+
+.analyst-form label {
+  display: block;
+  line-height: 1.5;
+}
+
+.analyst-form textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 90px;
+  padding: 14px;
+  resize: vertical;
+  font: inherit;
+  border-radius: 8px;
+}
+
+.analyst-form .ask-button {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.analyst-form .ask-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.analysis-result,
+.analysis-error {
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.analysis-panel {
+  min-width: 0;
+}
+
+.match-card:focus-visible,
+.analyst-form button:focus-visible,
+.analyst-form textarea:focus-visible {
+  outline: 3px solid #c7ff4f;
+  outline-offset: 4px;
+}
