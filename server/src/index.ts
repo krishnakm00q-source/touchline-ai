@@ -1,10 +1,11 @@
+
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Works in local development and in the compiled Render deployment.
+// Works in local development and compiled Render deployment.
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
 
@@ -12,14 +13,12 @@ dotenv.config({
   path: path.resolve(currentDir, "../.env"),
 });
 
-// Render supplies environment variables through process.env.
-// The .env file is only needed for local development.
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 
 // Root route
 app.get("/", (_req, res) => {
@@ -28,6 +27,7 @@ app.get("/", (_req, res) => {
     status: "running",
     health: "/api/health",
     matches: "/api/matches?competition=PL",
+    analysis: "/api/analysis",
   });
 });
 
@@ -80,7 +80,9 @@ app.get("/api/matches", async (req, res) => {
         providerMessage.slice(0, 300)
       );
 
-      return res.status(response.status === 429 ? 429 : 502).json({
+      return res.status(
+        response.status === 429 ? 429 : 502
+      ).json({
         error: "Football data provider request failed",
         providerStatus: response.status,
       });
@@ -88,11 +90,15 @@ app.get("/api/matches", async (req, res) => {
 
     const data = await response.json();
 
+    const matches = Array.isArray(data.matches)
+      ? data.matches
+      : [];
+
     return res.json({
       source: "football-data.org",
       competition,
-      count: Array.isArray(data.matches) ? data.matches.length : 0,
-      matches: Array.isArray(data.matches) ? data.matches : [],
+      count: matches.length,
+      matches,
     });
   } catch (error) {
     console.error("Football API request error:", error);
@@ -132,15 +138,17 @@ app.get("/api/matches/:id/details", async (req, res) => {
     );
 
     if (!response.ok) {
-      const message = await response.text();
+      const providerMessage = await response.text();
 
       console.error(
         "Match details API error:",
         response.status,
-        message.slice(0, 300)
+        providerMessage.slice(0, 300)
       );
 
-      return res.status(response.status === 429 ? 429 : 502).json({
+      return res.status(
+        response.status === 429 ? 429 : 502
+      ).json({
         error: "Match details are unavailable from the provider.",
         providerStatus: response.status,
       });
@@ -236,7 +244,7 @@ app.post("/api/analysis", (req, res) => {
 
   const home = match.homeTeam.name;
   const away = match.awayTeam.name;
-  const status = String(match.status ?? "UNKNOWN");
+  const status = String(match.status ?? "UNKNOWN").toUpperCase();
   const q = question.trim().toLowerCase();
 
   const homeScore = match.score?.fullTime?.home;
@@ -244,52 +252,115 @@ app.post("/api/analysis", (req, res) => {
 
   const hasScore =
     typeof homeScore === "number" &&
-    typeof awayScore === "number";
+    Number.isFinite(homeScore) &&
+    typeof awayScore === "number" &&
+    Number.isFinite(awayScore);
+
+  const isUpcoming =
+    status === "SCHEDULED" ||
+    status === "TIMED";
+
+  const isFinished = status === "FINISHED";
+
+  const isLive =
+    status === "IN_PLAY" ||
+    status === "PAUSED" ||
+    status === "LIVE" ||
+    status === "EXTRA_TIME" ||
+    status === "PENALTY_SHOOTOUT";
 
   let answer: string;
 
-  if (status === "SCHEDULED" || status === "TIMED") {
+  if (isUpcoming) {
     answer =
       `${home} vs ${away} has not started yet. ` +
-      "Confirmed formations, lineups and player availability " +
-      "are not established by the fixture data alone.";
+      "No match result is available. Confirmed formations, " +
+      "lineups and player availability cannot be established " +
+      "from fixture data alone.";
   } else if (!hasScore) {
     answer =
       `The selected fixture is ${home} vs ${away}. ` +
       "A confirmed score is unavailable, so a reliable result " +
-      "or tactical explanation cannot be provided yet.";
+      "or detailed tactical explanation cannot be provided yet.";
   } else {
     const scoreText =
       `${home} ${homeScore}–${awayScore} ${away}`;
 
-    const result =
+    const scoreDescription =
+      homeScore > awayScore
+        ? `${home} ${isFinished ? "won" : "lead"} ${homeScore}–${awayScore}.`
+        : awayScore > homeScore
+          ? `${away} ${isFinished ? "won" : "lead"} ${awayScore}–${homeScore}.`
+          : `The score is level at ${homeScore}–${awayScore}.`;
+
+    const finalResult =
       homeScore > awayScore
         ? `${home} won ${homeScore}–${awayScore}.`
         : awayScore > homeScore
           ? `${away} won ${awayScore}–${homeScore}.`
           : `The match finished ${homeScore}–${awayScore}.`;
 
-    if (q.includes("score") || q.includes("result")) {
-      answer = `Match result: ${scoreText}. ${result}`;
-    } else if (
+    const asksForStatistics =
+      q.includes("possession") ||
+      q.includes("shots") ||
+      q.includes("expected goals") ||
+      q.includes("xg") ||
+      q.includes("statistics") ||
+      q.includes("stats") ||
+      q.includes("pass accuracy") ||
+      q.includes("corners");
+
+    const asksForResult =
+      q.includes("score") ||
+      q.includes("result") ||
+      q.includes("won") ||
+      q.includes("winner");
+
+    const asksForTactics =
       q.includes("why") ||
       q.includes("tactic") ||
-      q.includes("tactical")
-    ) {
+      q.includes("tactical") ||
+      q.includes("formation");
+
+    const asksForPlayer =
+      q.includes("player") ||
+      q.includes("best") ||
+      q.includes("man of the match");
+
+    if (asksForStatistics) {
       answer =
-        `${scoreText}. ${result} ` +
+        "Detailed possession, shots, expected-goals and other " +
+        "performance statistics are not included in the data " +
+        "supplied to this analysis request. They are unavailable, " +
+        "not zero.";
+    } else if (asksForResult) {
+      if (isFinished) {
+        answer = `Final result: ${scoreText}. ${finalResult}`;
+      } else if (isLive) {
+        answer =
+          `Current recorded score: ${scoreText}. ` +
+          `${scoreDescription} This is not a confirmed final result.`;
+      } else {
+        answer =
+          `Recorded score: ${scoreText}. ${scoreDescription} ` +
+          "The match status does not confirm a final result.";
+      }
+    } else if (asksForTactics) {
+      answer =
+        `${isFinished ? "Final score" : "Recorded score"}: ${scoreText}. ` +
         "The score alone does not establish why the match ended " +
-        "this way. Verified match events and performance statistics " +
-        "are needed for a tactical explanation.";
-    } else if (q.includes("player") || q.includes("best")) {
+        "this way. Verified match events, formations and performance " +
+        "statistics are needed for a reliable tactical explanation.";
+    } else if (asksForPlayer) {
       answer =
-        `${scoreText}. Player-level performance data is not available ` +
-        "in this analysis request, so I cannot reliably name the best player.";
+        "Player-level performance data is not available in this " +
+        "analysis request, so I cannot reliably name the best player.";
     } else {
       answer =
-        `${scoreText}. ${result} ` +
-        "This prototype uses fixture and score data; it does not " +
-        "yet provide generative AI analysis or detailed match statistics.";
+        `${isFinished ? "Final score" : "Recorded score"}: ${scoreText}. ` +
+        `${scoreDescription} This rules-based prototype uses fixture ` +
+        "and score data; it does not provide generative AI analysis " +
+        "or detailed statistics.";
     }
   }
 
@@ -297,16 +368,18 @@ app.post("/api/analysis", (req, res) => {
     match: `${home} vs ${away}`,
     question: question.trim(),
     answer,
-    source: "football-data.org fixture data",
+    source: "football-data.org fixture data supplied by the client",
     analysisType: "rules-based prototype",
     limitations: [
-      "No verified possession or expected-goals data supplied",
-      "No confirmed formations or player-level statistics supplied",
-      "No generative AI model is connected to this endpoint",
+      "The analysis uses the match object submitted by the frontend.",
+      "Possession, shots and expected-goals statistics are not verified by this route.",
+      "Confirmed formations and player-level statistics are not supplied.",
+      "No generative AI model is connected to this endpoint.",
     ],
   });
 });
 
+// Start server
 app.listen(PORT, () => {
   console.log(`Touchline AI API listening on port ${PORT}`);
   console.log(`Football API token configured: ${Boolean(TOKEN)}`);
