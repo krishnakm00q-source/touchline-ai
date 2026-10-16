@@ -90,7 +90,7 @@ function App() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
+const [retryCount, setRetryCount] = useState(0);
   const [question, setQuestion] = useState("");
   const [analysis, setAnalysis] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
@@ -139,7 +139,7 @@ function App() {
     void loadMatches();
 
     return () => controller.abort();
-  }, []);
+}, [retryCount]);
 
   // Ask the existing rules-based backend analyst.
   async function askAnalyst() {
@@ -155,10 +155,11 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          match: selected,
-          question: question.trim(),
-        }),
+       body: JSON.stringify({
+  matchId: selected.id,
+  competition: selected.competition?.code ?? "PL",
+  question: question.trim(),
+}),
       });
 
       const data = await readJson<AnalysisResponse>(response);
@@ -295,9 +296,12 @@ function App() {
           <h2>Fixtures unavailable</h2>
           <p>{error}</p>
 
-          <button onClick={() => window.location.reload()}>
-            Try again
-          </button>
+          <button
+  onClick={() => setRetryCount((count) => count + 1)}
+  disabled={loading}
+>
+  {loading ? "Retrying…" : "Try again"}
+</button>
         </section>
       )}
 
@@ -365,7 +369,6 @@ function App() {
                   key={match.id}
                   onClick={() => selectMatch(match)}
                   aria-pressed={selected?.id === match.id}
-                  key-nav="match"
                 >
                   <span className="match-meta">
                     {matchStatus(match)} · {formatDate(match.utcDate)}
