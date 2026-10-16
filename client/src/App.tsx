@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import "./styles.css";
-
+const API_BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || ""
+).replace(/\/+$/, "");
 type Team = {
   id?: number;
   name?: string;
@@ -103,10 +105,7 @@ function App() {
         setLoading(true);
         setError("");
 
-        const response = await fetch(
-          "/api/matches?competition=PL",
-          { signal: controller.signal }
-        );
+        const response = await fetch(`${API_BASE_URL}/api/matches?competition=PL`);
 
         const data = await readJson<MatchesResponse>(response);
 
@@ -151,7 +150,7 @@ function App() {
     setAnalysisError("");
 
     try {
-      const response = await fetch("/api/analysis", {
+      const response = await fetch(`${API_BASE_URL}/api/analysis`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
