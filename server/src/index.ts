@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+// Works in local development and in the compiled Render deployment.
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
 
@@ -11,6 +12,8 @@ dotenv.config({
   path: path.resolve(currentDir, "../.env"),
 });
 
+// Render supplies environment variables through process.env.
+// The .env file is only needed for local development.
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
@@ -18,6 +21,17 @@ const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
 app.use(cors());
 app.use(express.json());
 
+// Root route
+app.get("/", (_req, res) => {
+  res.json({
+    name: "TOUCHLINE AI API",
+    status: "running",
+    health: "/api/health",
+    matches: "/api/matches?competition=PL",
+  });
+});
+
+// Health check
 app.get("/api/health", (_req, res) => {
   res.json({
     ok: true,
@@ -26,6 +40,7 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// Fetch competition fixtures and scores
 app.get("/api/matches", async (req, res) => {
   const competition = String(req.query.competition || "PL");
   const allowedCompetitions = ["PL", "PD", "BL1", "SA", "FL1"];
@@ -37,8 +52,10 @@ app.get("/api/matches", async (req, res) => {
   }
 
   if (!TOKEN) {
+    console.error("FOOTBALL_DATA_TOKEN is not configured.");
+
     return res.status(500).json({
-      error: "FOOTBALL_DATA_TOKEN is missing from server/.env",
+      error: "Football API token is not configured on the server.",
     });
   }
 
@@ -85,9 +102,8 @@ app.get("/api/matches", async (req, res) => {
     });
   }
 });
-// ------------------------------
-// VERIFIED MATCH DETAILS
-// ------------------------------
+
+// Verified match details, if the provider makes them available
 app.get("/api/matches/:id/details", async (req, res) => {
   const matchId = Number(req.params.id);
 
@@ -99,7 +115,7 @@ app.get("/api/matches/:id/details", async (req, res) => {
 
   if (!TOKEN) {
     return res.status(500).json({
-      error: "FOOTBALL_DATA_TOKEN is missing.",
+      error: "Football API token is not configured on the server.",
     });
   }
 
@@ -187,6 +203,8 @@ app.get("/api/matches/:id/details", async (req, res) => {
     });
   }
 });
+
+// Clearly labelled illustrative data
 app.get("/api/analysis/demo", (_req, res) => {
   res.json({
     mode: "demo",
@@ -195,10 +213,12 @@ app.get("/api/analysis/demo", (_req, res) => {
       { metric: "Possession", teamA: 56, teamB: 44, unit: "%" },
       { metric: "Pass accuracy", teamA: 82, teamB: 76, unit: "%" },
     ],
-    caveat: "These values are illustrative, not real match statistics.",
+    caveat:
+      "These values are illustrative, not real match statistics.",
   });
 });
 
+// Rules-based analyst prototype
 app.post("/api/analysis", (req, res) => {
   const { match, question } = req.body ?? {};
 
@@ -239,7 +259,8 @@ app.post("/api/analysis", (req, res) => {
       "A confirmed score is unavailable, so a reliable result " +
       "or tactical explanation cannot be provided yet.";
   } else {
-    const scoreText = `${home} ${homeScore}–${awayScore} ${away}`;
+    const scoreText =
+      `${home} ${homeScore}–${awayScore} ${away}`;
 
     const result =
       homeScore > awayScore
@@ -287,6 +308,6 @@ app.post("/api/analysis", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Touchline AI API running at http://localhost:${PORT}`);
+  console.log(`Touchline AI API listening on port ${PORT}`);
   console.log(`Football API token configured: ${Boolean(TOKEN)}`);
 });
