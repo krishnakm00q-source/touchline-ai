@@ -156,6 +156,7 @@ const [retryCount, setRetryCount] = useState(0);
           "Content-Type": "application/json",
         },
        body: JSON.stringify({
+  match: selected,
   matchId: selected.id,
   competition: selected.competition?.code ?? "PL",
   question: question.trim(),
