@@ -4,7 +4,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-
+import { GoogleGenAI } from "@google/genai";
 // Works in local development and compiled Render deployment.
 const currentFile = fileURLToPath(import.meta.url);
 const currentDir = path.dirname(currentFile);
@@ -16,6 +16,12 @@ dotenv.config({
 const app = express();
 const PORT = Number(process.env.PORT || 4000);
 const TOKEN = process.env.FOOTBALL_DATA_TOKEN;
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+const gemini = GEMINI_API_KEY
+  ? new GoogleGenAI({ apiKey: GEMINI_API_KEY })
+  : null;
 
 app.use(cors());
 app.use(express.json({ limit: "100kb" }));
@@ -226,24 +232,155 @@ app.get("/api/analysis/demo", (_req, res) => {
   });
 });
 
+async function generateTacticalAnalysis({
+  home,
+  away,
+  status,
+  homeScore,
+  awayScore,
+  hasScore,
+  question,
+  tacticalStyle,
+  detailLevel,
+}: {
+  home: string;
+  away: string;
+  status: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  hasScore: boolean;
+  question: string;
+  tacticalStyle: string;
+  detailLevel: string;
+}): Promise<string | null> {
+ console.log("Gemini helper called");
+console.log("Gemini client available:", Boolean(gemini));
+
+if (!gemini) return null;
+  const styles: Record<string, string> = {
+    klopp:
+      "Pressing, counter-pressing, vertical attacks and transitions",
+    pep:
+      "Positional play, spacing, overloads and control",
+    mourinho:
+      "Defensive organisation, compactness and transitions",
+    neutral:
+      "Neutral, evidence-led tactical analysis",
+  };
+
+  const scoreText = hasScore
+    ? `${home} ${homeScore}–${awayScore} ${away}`
+    : "No confirmed score available";
+
+  const prompt = `
+You are TOUCHLINE AI, a football tactical analyst.
+
+MATCH: ${home} vs ${away}
+STATUS: ${status}
+RECORDED SCORE: ${scoreText}
+USER QUESTION: ${question}
+
+TACTICAL STYLE:
+${styles[tacticalStyle] ?? styles.neutral}
+
+EXPLANATION DEPTH: ${detailLevel}
+
+RULES:
+- Never invent match events, line-ups, formations, statistics or xG.
+- A score alone does not prove why a team won or lost.
+- Explain possible tactical reasons as hypotheses, not verified facts.
+- If requested statistics are unavailable, say so clearly.
+- Do not pretend you watched the match or checked live sources.
+- Explain tactical concepts clearly and answer the user's question.
+`;
+
+  
+const delays = [1000, 2000, 4000];
+
+for (let attempt = 0; attempt <= delays.length; attempt++) {
+  try {
+    const response = await gemini.models.generateContent({
+      model: "gemini-3.8-flash",
+      contents: prompt,
+      config: {
+        temperature: 0.3,
+        maxOutputTokens: detailLevel === "simple" ? 350 : 700,
+      },
+    });
+
+    console.log("Gemini response received:", Boolean(response.text));
+console.log("Gemini response length:", response.text?.length ?? 0);
+
+return response.text?.trim() || null;
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    const isTemporary =
+      message.includes("503") ||
+      message.includes("UNAVAILABLE") ||
+      message.includes("429") ||
+      message.includes("RESOURCE_EXHAUSTED");
+
+    if (!isTemporary || attempt === delays.length) {
+      console.error("Gemini analysis unavailable:", message);
+      return null;
+    }
+
+    console.warn(
+      `Gemini temporary error; retry ${attempt + 1}/${delays.length}`
+    );
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, delays[attempt])
+    );
+  }
+}
+
+return null;
+
+}
+
 // Rules-based analyst prototype
 app.post("/api/analysis", async (req, res) => {
-  const { matchId, competition = "PL", question } = req.body ?? {};
+  const {
+  matchId,
+  competition = "PL",
+  question,
+  tacticalStyle = "klopp",
+  detailLevel = "detailed",
+} = req.body ?? {};
+
+const allowedStyles = [
+  "klopp",
+  "pep",
+  "mourinho",
+  "neutral",
+];
+
+const allowedDetailLevels = [
+  "simple",
+  "detailed",
+];
 
   const allowedCompetitions = ["PL", "PD", "BL1", "SA", "FL1"];
 
-  if (
-    !Number.isSafeInteger(matchId) ||
-    matchId <= 0 ||
-    typeof competition !== "string" ||
-    !allowedCompetitions.includes(competition) ||
-    typeof question !== "string" ||
-    !question.trim()
-  ) {
-    return res.status(400).json({
-      error: "A valid match ID, competition and question are required.",
-    });
-  }
+ if (
+  !Number.isSafeInteger(matchId) ||
+  matchId <= 0 ||
+  typeof competition !== "string" ||
+  !allowedCompetitions.includes(competition) ||
+  typeof question !== "string" ||
+  !question.trim() ||
+  typeof tacticalStyle !== "string" ||
+  !allowedStyles.includes(tacticalStyle) ||
+  typeof detailLevel !== "string" ||
+  !allowedDetailLevels.includes(detailLevel)
+) {
+  return res.status(400).json({
+    error: "Invalid match, question or analysis preferences.",
+  });
+}
 
   if (!TOKEN) {
     return res.status(500).json({
@@ -324,20 +461,69 @@ app.post("/api/analysis", async (req, res) => {
       answer =
         `${home} vs ${away} has not started yet. ` +
         "No match result is available from the fixture data.";
-    } else if (
-      q.includes("possession") ||
-      q.includes("shots") ||
-      q.includes("statistics") ||
-      q.includes("stats") ||
-      q.includes("expected goals") ||
-      q.includes("xg") ||
-      q.includes("pass accuracy") ||
-      q.includes("corners")
-    ) {
-      answer =
-        "Detailed match statistics are not verified by this request. " +
-        "Possession, shots and expected goals are unavailable here.";
-    } else if (!hasScore) {
+    
+} else if (
+  q.includes("possession") ||
+  q.includes("shots") ||
+  q.includes("statistics") ||
+  q.includes("stats") ||
+  q.includes("expected goals") ||
+  q.includes("xg") ||
+  q.includes("pass accuracy") ||
+  q.includes("corners")
+) {
+  answer =
+    "Detailed match statistics are not verified by this request. " +
+    "Possession, shots and expected goals are unavailable here.";
+} else if (
+  q.includes("goal") ||
+  q.includes("scorer") ||
+  q.includes("scored") ||
+  q.includes("assist")
+) {
+  const hasGoalEvents = Array.isArray(match.goals);
+  const goals = hasGoalEvents ? match.goals : [];
+
+  if (!hasGoalEvents) {
+    answer =
+      "Goal-event data is not included in the provider response " +
+      "for this fixture.";
+  } else if (goals.length === 0) {
+    answer =
+      "No goal events were returned for this fixture. " +
+      "This does not by itself confirm a 0–0 result.";
+  } else {
+    const goalSummaries = goals.slice(0, 10).map((goal: {
+      minute?: number | null;
+      injuryTime?: number | null;
+      scorer?: { name?: string } | null;
+      team?: { name?: string } | null;
+      assist?: { name?: string } | null;
+    }) => {
+      const minute =
+        typeof goal.minute === "number"
+          ? `${goal.minute}${
+              typeof goal.injuryTime === "number" && goal.injuryTime > 0
+                ? `+${goal.injuryTime}`
+                : ""
+            }'`
+          : "Minute unavailable";
+
+      const scorer = goal.scorer?.name ?? "Scorer unavailable";
+      const team = goal.team?.name ?? "Team unavailable";
+      const assist = goal.assist?.name;
+
+      return `${minute}: ${scorer} (${team})${
+        assist ? `, assisted by ${assist}` : ""
+      }`;
+    });
+
+    answer =
+      `Provider-recorded goal events for ${home} vs ${away}:\n` +
+      goalSummaries.join("\n");
+  }
+} else if (!hasScore) {
+
       answer =
         `The selected fixture is ${home} vs ${away}. ` +
         "A confirmed score is unavailable, so a reliable result " +
@@ -388,23 +574,76 @@ app.post("/api/analysis", async (req, res) => {
       }
     }
 
+
+
+const asksForUnavailableStats =
+  q.includes("possession") ||
+  q.includes("shots") ||
+  q.includes("statistics") ||
+  q.includes("stats") ||
+  q.includes("expected goals") ||
+  q.includes("xg") ||
+  q.includes("pass accuracy") ||
+  q.includes("corners");
+
+const asksForTactics =
+  q.includes("why") ||
+  q.includes("tactic") ||
+  q.includes("formation") ||
+  q.includes("press") ||
+  q.includes("transition") ||
+  q.includes("shape") ||
+  q.includes("strategy") ||
+  q.includes("how did");
+
+let analysisType = "server-verified rules-based prototype";
+console.log("Tactical request matched:", asksForTactics);
+console.log("Stats-only question:", asksForUnavailableStats);
+console.log("Gemini key loaded:", Boolean(GEMINI_API_KEY));
+console.log("Gemini client ready:", Boolean(gemini));
+console.log("Will call Gemini:", asksForTactics && !asksForUnavailableStats && Boolean(gemini));
+if (
+  asksForTactics &&
+  !asksForUnavailableStats &&
+  gemini
+) {
+  const aiAnswer = await generateTacticalAnalysis({
+    home,
+    away,
+    status,
+    homeScore,
+    awayScore,
+    hasScore,
+    question: question.trim(),
+    tacticalStyle,
+    detailLevel,
+  });
+
+  if (aiAnswer) {
+    answer = aiAnswer;
+    analysisType = "Gemini-generated tactical explanation";
+  }
+}
+
     return res.json({
-      matchId: match.id,
-      match: `${home} vs ${away}`,
-      status,
-      score: hasScore
-        ? { home: homeScore, away: awayScore }
-        : null,
-      question: question.trim(),
-      answer,
-      source: "football-data.org",
-      analysisType: "server-verified rules-based prototype",
-      limitations: [
-        "The match ID and score are checked against provider fixtures.",
-        "Detailed performance statistics are not verified by this route.",
-        "No generative AI model is connected to this endpoint.",
-      ],
-    });
+  matchId: match.id,
+  match: `${home} vs ${away}`,
+  status,
+  score: hasScore
+    ? { home: homeScore, away: awayScore }
+    : null,
+  question: question.trim(),
+  tacticalStyle,
+  detailLevel,
+  answer,
+  source: "football-data.org",
+ analysisType,
+  limitations: [
+    "The match ID and score are checked against provider fixtures.",
+    "Detailed performance statistics are not verified by this route.",
+    "No generative AI model is connected to this endpoint.",
+  ],
+});
   } catch (error) {
     console.error("Analysis request failed:", error);
 

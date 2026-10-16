@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./styles.css";
 const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL || ""
@@ -90,11 +90,135 @@ function App() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-const [retryCount, setRetryCount] = useState(0);
+
   const [question, setQuestion] = useState("");
   const [analysis, setAnalysis] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState("");
+  const [isListening, setIsListening] = useState(false);
+  const [voiceError, setVoiceError] = useState("");
+  const [voiceSupported, setVoiceSupported] = useState(true);
+  const recognitionRef = useRef<any>(null);
+
+  // Detect browser support for speech recognition and spoken responses.
+  useEffect(() => {
+    const browserWindow = window as any;
+    const supported = Boolean(
+      browserWindow.SpeechRecognition || browserWindow.webkitSpeechRecognition
+    );
+    setVoiceSupported(supported);
+  }, []);
+
+  function startVoiceInput() {
+    const browserWindow = window as any;
+    const SpeechRecognition =
+      browserWindow.SpeechRecognition ||
+      browserWindow.webkitSpeechRecognition;
+
+    setVoiceError("");
+
+    if (!SpeechRecognition) {
+      setVoiceSupported(false);
+      setVoiceError(
+        "Voice input is not supported in this browser. Try the latest Chrome browser, or type your question."
+      );
+      return;
+    }
+
+    try {
+      // Stop an earlier recognition session before starting another.
+      if (recognitionRef.current) {
+        recognitionRef.current.onresult = null;
+        recognitionRef.current.onerror = null;
+        recognitionRef.current.onend = null;
+        recognitionRef.current.stop();
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.continuous = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setVoiceError("");
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (typeof transcript === "string" && transcript.trim()) {
+          setQuestion(transcript.trim());
+        } else {
+          setVoiceError("I couldn't hear a clear question. Please try again.");
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        const messages: Record<string, string> = {
+          "not-allowed":
+            "Microphone permission was blocked. Allow microphone access in your browser settings and try again.",
+          "service-not-allowed":
+            "This browser does not allow speech recognition. Try Chrome or type your question.",
+          "no-speech": "No speech was detected. Tap the microphone and speak again.",
+          "audio-capture":
+            "No microphone was found. Check your microphone connection and permissions.",
+          network:
+            "Voice recognition needs a working network connection. Please try again.",
+        };
+        setVoiceError(
+          messages[event.error] ||
+            `Voice input failed (${event.error || "unknown error"}). You can type your question instead.`
+        );
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setIsListening(false);
+      setVoiceError(
+        "Couldn't start the microphone. Check browser permissions and try again."
+      );
+    }
+  }
+
+  function stopVoiceInput() {
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // The recognition session may already have stopped.
+    }
+    setIsListening(false);
+  }
+
+  function speakAnswer(text: string) {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setVoiceError("Spoken answers are not supported in this browser. The answer is still shown on screen.");
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 1;
+    utterance.pitch = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  useEffect(() => {
+    return () => {
+      try {
+        recognitionRef.current?.stop();
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      } catch {
+        // Ignore cleanup errors.
+      }
+    };
+  }, []);
 
   // Load real football fixtures.
   useEffect(() => {
@@ -105,7 +229,10 @@ const [retryCount, setRetryCount] = useState(0);
         setLoading(true);
         setError("");
 
-        const response = await fetch(`${API_BASE_URL}/api/matches?competition=PL`);
+        const response = await fetch(
+          `${API_BASE_URL}/api/matches?competition=PL`,
+          { signal: controller.signal }
+        );
 
         const data = await readJson<MatchesResponse>(response);
 
@@ -139,7 +266,7 @@ const [retryCount, setRetryCount] = useState(0);
     void loadMatches();
 
     return () => controller.abort();
-}, [retryCount]);
+  }, []);
 
   // Ask the existing rules-based backend analyst.
   async function askAnalyst() {
@@ -155,12 +282,14 @@ const [retryCount, setRetryCount] = useState(0);
         headers: {
           "Content-Type": "application/json",
         },
-       body: JSON.stringify({
-  match: selected,
-  matchId: selected.id,
-  competition: selected.competition?.code ?? "PL",
-  question: question.trim(),
-}),
+        body: JSON.stringify({
+          match: selected,
+          matchId: selected.id,
+          competition: selected.competition?.code ?? "PL",
+          question: question.trim(),
+          tacticalStyle: "neutral",
+          detailLevel: "detailed",
+        }),
       });
 
       const data = await readJson<AnalysisResponse>(response);
@@ -171,7 +300,9 @@ const [retryCount, setRetryCount] = useState(0);
         );
       }
 
-      setAnalysis(data.answer ?? "No analysis was returned.");
+      const answer = data.answer ?? "No analysis was returned.";
+      setAnalysis(answer);
+      speakAnswer(answer);
     } catch (err) {
       setAnalysisError(
         err instanceof Error
@@ -297,12 +428,9 @@ const [retryCount, setRetryCount] = useState(0);
           <h2>Fixtures unavailable</h2>
           <p>{error}</p>
 
-          <button
-  onClick={() => setRetryCount((count) => count + 1)}
-  disabled={loading}
->
-  {loading ? "Retrying…" : "Try again"}
-</button>
+          <button onClick={() => window.location.reload()}>
+            Try again
+          </button>
         </section>
       )}
 
@@ -522,20 +650,86 @@ const [retryCount, setRetryCount] = useState(0);
                 ASK THE TACTICAL ANALYST
               </label>
 
+              <div
+                className="voice-controls"
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "10px",
+                  margin: "12px 0",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={isListening ? stopVoiceInput : startVoiceInput}
+                  aria-label={isListening ? "Stop microphone" : "Ask Touchline using voice"}
+                  aria-pressed={isListening}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "8px",
+                    minHeight: "46px",
+                    padding: "10px 16px",
+                    border: isListening ? "1px solid #f87171" : "1px solid #64748b",
+                    borderRadius: "12px",
+                    background: isListening ? "#7f1d1d" : "#172033",
+                    color: "#ffffff",
+                    fontSize: "15px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  <span aria-hidden="true">{isListening ? "⏹️" : "🎙️"}</span>
+                  {isListening ? "Listening… tap to stop" : "Ask Touchline"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVoiceError("");
+                    if ("speechSynthesis" in window) {
+                      window.speechSynthesis.cancel();
+                    }
+                  }}
+                  style={{
+                    minHeight: "46px",
+                    padding: "10px 14px",
+                    border: "1px solid #64748b",
+                    borderRadius: "12px",
+                    background: "transparent",
+                    color: "inherit",
+                    fontSize: "14px",
+                    cursor: "pointer",
+                  }}
+                >
+                  Stop spoken answer
+                </button>
+              </div>
+
+              {voiceError && (
+                <p role="status" className="analysis-error">
+                  {voiceError}
+                </p>
+              )}
+
+              {!voiceSupported && (
+                <p className="data-note">
+                  Voice input may not work in this browser. You can still type a question below.
+                </p>
+              )}
+
               <textarea
                 id="analyst-question"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
                 onKeyDown={(event) => {
-                  if (
-                    event.key === "Enter" &&
-                    !event.shiftKey
-                  ) {
+                  if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     void askAnalyst();
                   }
                 }}
-                placeholder="Why did this team win?"
+                placeholder="Tap Ask Touchline or type: Why did this team win?"
                 rows={3}
               />
 

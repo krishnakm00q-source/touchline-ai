@@ -411,4 +411,30 @@ footer {
 .analyst-form textarea:focus-visible {
   outline: 3px solid #c7ff4f;
   outline-offset: 4px;
+}.analyst-preferences {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.analyst-preferences label {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+
+.analyst-preferences select {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: #171a1d;
+  color: #ffffff;
+  font: inherit;
+}
+
+.analyst-preferences select:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
